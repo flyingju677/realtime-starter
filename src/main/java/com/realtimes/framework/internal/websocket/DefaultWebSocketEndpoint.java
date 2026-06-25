@@ -26,7 +26,7 @@ public class DefaultWebSocketEndpoint {
         WebSocketSessionRegistry sessionRegistry = SpringContextHolder.getBean(WebSocketSessionRegistry.class);
         SessionContext context = new DefaultSessionContext(session);
         sessionRegistry.register(session, context);
-        log.info("Realtime websocket session connected: {}, online: {}", session.getId(), sessionRegistry.getOnlineSessionCount());
+        log.info("Session {} 已连接, 在线sessions总数: {}", session.getId(), sessionRegistry.getOnlineSessionCount());
     }
 
     @OnClose
@@ -38,11 +38,13 @@ public class DefaultWebSocketEndpoint {
         cleanupSubscriptions(session.getId());
         WebSocketSessionRegistry sessionRegistry = SpringContextHolder.getBean(WebSocketSessionRegistry.class);
         sessionRegistry.unregister(session);
-        log.info("Realtime websocket session closed: {}, online: {}", session.getId(), sessionRegistry.getOnlineSessionCount());
+        log.info("Session {} 断开连接, 在线sessions总数: {}", session.getId(), sessionRegistry.getOnlineSessionCount());
     }
 
     @OnMessage
     public void onMessage(String message, Session session) {
+        log.info("收到客户端信息：sessionId={}", session.getId());
+
         WebSocketSessionRegistry sessionRegistry = SpringContextHolder.getBean(WebSocketSessionRegistry.class);
         SessionContext context = sessionRegistry.getSessionContext(session.getId());
         if (context == null) {
@@ -56,7 +58,7 @@ public class DefaultWebSocketEndpoint {
     @OnError
     public void onError(Session session, Throwable error) {
         String sessionId = session == null ? null : session.getId();
-        log.error("Realtime websocket error: sessionId={}", sessionId, error);
+        log.error("websocket发生错误！ sessionId={}", sessionId, error);
     }
 
     private void cleanupSubscriptions(String sessionId) {
