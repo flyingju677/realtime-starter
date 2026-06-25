@@ -5,32 +5,38 @@ import com.realtimes.framework.api.session.SessionContext;
 import com.realtimes.framework.api.subscription.SubscriptionKey;
 import com.realtimes.framework.api.subscription.SubscriptionManager;
 import com.realtimes.framework.internal.support.SpringContextHolder;
-import jakarta.websocket.OnClose;
-import jakarta.websocket.OnError;
-import jakarta.websocket.OnMessage;
-import jakarta.websocket.OnOpen;
+import jakarta.websocket.CloseReason;
+import jakarta.websocket.Endpoint;
+import jakarta.websocket.EndpointConfig;
 import jakarta.websocket.Session;
-import jakarta.websocket.server.ServerEndpoint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Set;
 
-@ServerEndpoint("/websocket/subscribe")
-public class DefaultWebSocketEndpoint {
+/**
+ * WebSocket端点类，负责WS连接的生命周期
+ *
+ * Jakarta WebSocket 有两种主要写法：
+ * 1. 注解式：@ServerEndpoint + @OnOpen / @OnMessage
+ * 2. 编程式：继承 Endpoint + ServerEndpointConfig
+ * 要动态配置 URL，就不能继续依赖 @ServerEndpoint("/固定路径")，所以改成编程式注册。Endpoint是 JSR-356提供的编程式服务端端点基类，配合 ServerEndpointConfig 可以在运行时指定 path。
+ */
+public class DefaultWebSocketEndpoint extends Endpoint {
 
     private static final Logger log = LoggerFactory.getLogger(DefaultWebSocketEndpoint.class);
 
-    @OnOpen
-    public void onOpen(Session session) {
+    @Override
+    public void onOpen(Session session, EndpointConfig config) {
         WebSocketSessionRegistry sessionRegistry = SpringContextHolder.getBean(WebSocketSessionRegistry.class);
         SessionContext context = new DefaultSessionContext(session);
         sessionRegistry.register(session, context);
+        session.addMessageHandler(String.class, message -> handleMessage(message, session));
         log.info("Session {} 已连接, 在线sessions总数: {}", session.getId(), sessionRegistry.getOnlineSessionCount());
     }
 
-    @OnClose
-    public void onClose(Session session) {
+    @Override
+    public void onClose(Session session, CloseReason closeReason) {
         if (session == null) {
             return;
         }
@@ -41,8 +47,7 @@ public class DefaultWebSocketEndpoint {
         log.info("Session {} 断开连接, 在线sessions总数: {}", session.getId(), sessionRegistry.getOnlineSessionCount());
     }
 
-    @OnMessage
-    public void onMessage(String message, Session session) {
+    private void handleMessage(String message, Session session) {
         log.info("收到客户端信息：sessionId={}", session.getId());
 
         WebSocketSessionRegistry sessionRegistry = SpringContextHolder.getBean(WebSocketSessionRegistry.class);
@@ -55,7 +60,7 @@ public class DefaultWebSocketEndpoint {
         SpringContextHolder.getBean(MessageRouter.class).route(message, context);
     }
 
-    @OnError
+    @Override
     public void onError(Session session, Throwable error) {
         String sessionId = session == null ? null : session.getId();
         log.error("websocket发生错误！ sessionId={}", sessionId, error);
@@ -69,4 +74,3 @@ public class DefaultWebSocketEndpoint {
         }
     }
 }
-

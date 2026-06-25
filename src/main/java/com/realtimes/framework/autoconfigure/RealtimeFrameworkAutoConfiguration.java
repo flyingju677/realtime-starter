@@ -20,6 +20,7 @@ import com.realtimes.framework.internal.websocket.DefaultWebSocketEndpoint;
 import com.realtimes.framework.internal.websocket.MemoryWebSocketSessionRegistry;
 import com.realtimes.framework.internal.websocket.WebSocketSessionRegistry;
 import com.realtimes.framework.properties.RealtimeFrameworkProperties;
+import jakarta.websocket.server.ServerEndpointConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -29,6 +30,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.util.StringUtils;
 import org.springframework.web.socket.server.standard.ServerEndpointExporter;
 
 @AutoConfiguration
@@ -37,6 +39,8 @@ import org.springframework.web.socket.server.standard.ServerEndpointExporter;
 public class RealtimeFrameworkAutoConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(RealtimeFrameworkAutoConfiguration.class);
+
+    private static final String DEFAULT_WEBSOCKET_PATH = "/websocket/subscribe";
 
     @Bean("realtimeFrameworkExecutor")
     @ConditionalOnMissingBean(name = "realtimeFrameworkExecutor")
@@ -121,11 +125,13 @@ public class RealtimeFrameworkAutoConfiguration {
         return new DefaultMessageSender(sessionRegistry, subscriptionManager);
     }
 
-    @Bean
-    @ConditionalOnMissingBean
+    @Bean("defaultRealtimeWebSocketEndpointConfig")
+    @ConditionalOnMissingBean(name = "defaultRealtimeWebSocketEndpointConfig")
     @ConditionalOnProperty(prefix = "realtime.websocket", name = "enabled", havingValue = "true", matchIfMissing = true)
-    public DefaultWebSocketEndpoint defaultRealtimeWebSocketEndpoint() {
-        return new DefaultWebSocketEndpoint();
+    public ServerEndpointConfig defaultRealtimeWebSocketEndpointConfig(RealtimeFrameworkProperties properties) {
+        String path = resolveWebSocketPath(properties.getWebsocket().getPath());
+        log.info("Registering realtime websocket endpoint at path: {}", path);
+        return ServerEndpointConfig.Builder.create(DefaultWebSocketEndpoint.class, path).build();
     }
 
     @Bean
@@ -133,6 +139,21 @@ public class RealtimeFrameworkAutoConfiguration {
     @ConditionalOnProperty(prefix = "realtime.websocket", name = "enabled", havingValue = "true", matchIfMissing = true)
     public ServerEndpointExporter serverEndpointExporter() {
         return new ServerEndpointExporter();
+    }
+
+    private String resolveWebSocketPath(String configuredPath) {
+        if (!StringUtils.hasText(configuredPath)) {
+            log.warn("realtime.websocket.path is blank, fallback to default path: {}", DEFAULT_WEBSOCKET_PATH);
+            return DEFAULT_WEBSOCKET_PATH;
+        }
+        String path = configuredPath.trim();
+        if (!path.startsWith("/")) {
+            String normalizedPath = "/" + path;
+            log.warn("realtime.websocket.path should start with '/', normalized from '{}' to '{}'",
+                    configuredPath, normalizedPath);
+            return normalizedPath;
+        }
+        return path;
     }
 }
 
