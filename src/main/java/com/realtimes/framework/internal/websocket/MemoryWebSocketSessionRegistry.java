@@ -17,6 +17,8 @@ public class MemoryWebSocketSessionRegistry implements WebSocketSessionRegistry 
 
     private final Map<String, Session> sessionMap = new ConcurrentHashMap<>();
 
+    private final Map<String, Long> lastActiveTimes = new ConcurrentHashMap<>();
+
     private final Set<Session> sessionPool = ConcurrentHashMap.newKeySet();
 
     private final SessionStorage sessionStorage;
@@ -34,6 +36,7 @@ public class MemoryWebSocketSessionRegistry implements WebSocketSessionRegistry 
 
         sessionPool.add(session);
         sessionMap.put(session.getId(), session);
+        refreshActivity(session.getId());
         if (context != null) {
             sessionStorage.addSession(session.getId(), context);
         }
@@ -56,6 +59,7 @@ public class MemoryWebSocketSessionRegistry implements WebSocketSessionRegistry 
         if (session != null) {
             sessionPool.remove(session);
         }
+        lastActiveTimes.remove(sessionId);
         sessionStorage.removeSession(sessionId);
     }
 
@@ -67,6 +71,25 @@ public class MemoryWebSocketSessionRegistry implements WebSocketSessionRegistry 
     @Override
     public SessionContext getSessionContext(String sessionId) {
         return sessionStorage.getSession(sessionId);
+    }
+
+    @Override
+    public void refreshActivity(String sessionId) {
+        refreshActivity(sessionId, System.currentTimeMillis());
+    }
+
+    void refreshActivity(String sessionId, long activeTime) {
+        if (sessionId != null) {
+            lastActiveTimes.put(sessionId, activeTime);
+        }
+    }
+
+    @Override
+    public long getLastActiveTime(String sessionId) {
+        if (sessionId == null) {
+            return 0;
+        }
+        return lastActiveTimes.getOrDefault(sessionId, 0L);
     }
 
     @Override
