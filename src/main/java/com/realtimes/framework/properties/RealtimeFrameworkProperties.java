@@ -24,6 +24,14 @@ public class RealtimeFrameworkProperties {
         private int maxTextMessageBufferSize = 8192;
         private int maxBinaryMessageBufferSize = 8192;
         private long maxSessionIdleTimeout = 300000;
+        private Heartbeat heartbeat = new Heartbeat();
+    }
+
+    @Data
+    public static class Heartbeat {
+        private boolean enabled = true;
+        private long interval = 30000;
+        private long timeout = 90000;
     }
 
     @Data
@@ -47,4 +55,3 @@ public class RealtimeFrameworkProperties {
         private int keepAliveSeconds = 60;
     }
 }
-

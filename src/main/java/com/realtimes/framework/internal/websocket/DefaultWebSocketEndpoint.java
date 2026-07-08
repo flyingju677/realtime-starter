@@ -2,17 +2,15 @@ package com.realtimes.framework.internal.websocket;
 
 import com.realtimes.framework.api.message.MessageRouter;
 import com.realtimes.framework.api.session.SessionContext;
-import com.realtimes.framework.api.subscription.SubscriptionKey;
-import com.realtimes.framework.api.subscription.SubscriptionManager;
 import com.realtimes.framework.internal.support.SpringContextHolder;
+import com.realtimes.framework.properties.RealtimeFrameworkProperties;
 import jakarta.websocket.CloseReason;
 import jakarta.websocket.Endpoint;
 import jakarta.websocket.EndpointConfig;
+import jakarta.websocket.PongMessage;
 import jakarta.websocket.Session;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.Set;
 
 /**
  * WebSocket端点类，负责WS连接的生命周期
@@ -30,7 +28,9 @@ public class DefaultWebSocketEndpoint extends Endpoint {
     public void onOpen(Session session, EndpointConfig config) {
         WebSocketSessionRegistry sessionRegistry = SpringContextHolder.getBean(WebSocketSessionRegistry.class);
         SessionContext context = new DefaultSessionContext(session);
+        applySessionConfig(session);
         sessionRegistry.register(session, context);
+        session.addMessageHandler(PongMessage.class, message -> sessionRegistry.refreshActivity(session.getId()));
         session.addMessageHandler(String.class, message -> handleMessage(message, session));
         log.info("Session {} 已连接, 在线sessions总数: {}", session.getId(), sessionRegistry.getOnlineSessionCount());
     }
@@ -41,9 +41,9 @@ public class DefaultWebSocketEndpoint extends Endpoint {
             return;
         }
 
-        cleanupSubscriptions(session.getId());
+        WebSocketSessionCleaner sessionCleaner = SpringContextHolder.getBean(WebSocketSessionCleaner.class);
+        sessionCleaner.cleanup(session.getId());
         WebSocketSessionRegistry sessionRegistry = SpringContextHolder.getBean(WebSocketSessionRegistry.class);
-        sessionRegistry.unregister(session);
         log.info("Session {} 断开连接, 在线sessions总数: {}", session.getId(), sessionRegistry.getOnlineSessionCount());
     }
 
@@ -51,6 +51,12 @@ public class DefaultWebSocketEndpoint extends Endpoint {
         log.info("收到客户端信息：sessionId={}", session.getId());
 
         WebSocketSessionRegistry sessionRegistry = SpringContextHolder.getBean(WebSocketSessionRegistry.class);
+        sessionRegistry.refreshActivity(session.getId());
+        if (WebSocketHeartbeatManager.FALLBACK_PONG_MESSAGE.equals(message)
+                || WebSocketHeartbeatManager.FALLBACK_PING_MESSAGE.equals(message)) {
+            return;
+        }
+
         SessionContext context = sessionRegistry.getSessionContext(session.getId());
         if (context == null) {
             log.warn("SessionContext not found, message ignored: sessionId={}", session.getId());
@@ -66,11 +72,11 @@ public class DefaultWebSocketEndpoint extends Endpoint {
         log.error("websocket发生错误！ sessionId={}", sessionId, error);
     }
 
-    private void cleanupSubscriptions(String sessionId) {
-        SubscriptionManager subscriptionManager = SpringContextHolder.getBean(SubscriptionManager.class);
-        Set<SubscriptionKey<?>> subscriptions = subscriptionManager.getSubscriptionsBySession(sessionId);
-        for (SubscriptionKey<?> subscription : subscriptions) {
-            subscriptionManager.unsubscribe(sessionId, subscription);
-        }
+    private void applySessionConfig(Session session) {
+        RealtimeFrameworkProperties properties = SpringContextHolder.getBean(RealtimeFrameworkProperties.class);
+        RealtimeFrameworkProperties.WebSocket websocket = properties.getWebsocket();
+        session.setMaxTextMessageBufferSize(websocket.getMaxTextMessageBufferSize());
+        session.setMaxBinaryMessageBufferSize(websocket.getMaxBinaryMessageBufferSize());
+        session.setMaxIdleTimeout(websocket.getMaxSessionIdleTimeout());
     }
 }

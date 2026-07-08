@@ -18,6 +18,8 @@ import com.realtimes.framework.internal.subscription.DefaultSubscriptionManager;
 import com.realtimes.framework.internal.support.SpringContextHolder;
 import com.realtimes.framework.internal.websocket.DefaultWebSocketEndpoint;
 import com.realtimes.framework.internal.websocket.MemoryWebSocketSessionRegistry;
+import com.realtimes.framework.internal.websocket.WebSocketHeartbeatManager;
+import com.realtimes.framework.internal.websocket.WebSocketSessionCleaner;
 import com.realtimes.framework.internal.websocket.WebSocketSessionRegistry;
 import com.realtimes.framework.properties.RealtimeFrameworkProperties;
 import jakarta.websocket.server.ServerEndpointConfig;
@@ -108,6 +110,23 @@ public class RealtimeFrameworkAutoConfiguration {
     @ConditionalOnMissingBean
     public WebSocketSessionRegistry realtimeWebSocketSessionRegistry(SessionStorage sessionStorage) {
         return new MemoryWebSocketSessionRegistry(sessionStorage);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public WebSocketSessionCleaner realtimeWebSocketSessionCleaner(WebSocketSessionRegistry sessionRegistry,
+                                                                   SubscriptionManager subscriptionManager) {
+        return new WebSocketSessionCleaner(sessionRegistry, subscriptionManager);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "realtime.websocket", name = {"enabled", "heartbeat.enabled"},
+            havingValue = "true", matchIfMissing = true)
+    public WebSocketHeartbeatManager realtimeWebSocketHeartbeatManager(WebSocketSessionRegistry sessionRegistry,
+                                                                       WebSocketSessionCleaner sessionCleaner,
+                                                                       RealtimeFrameworkProperties properties) {
+        return new WebSocketHeartbeatManager(sessionRegistry, sessionCleaner, properties.getWebsocket().getHeartbeat());
     }
 
     @Bean

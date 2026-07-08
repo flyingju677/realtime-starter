@@ -17,6 +17,10 @@ public interface WebSocketSessionRegistry {
 
     SessionContext getSessionContext(String sessionId);
 
+    void refreshActivity(String sessionId);
+
+    long getLastActiveTime(String sessionId);
+
     Set<Session> getAllSessions();
 
     int getOnlineSessionCount();
